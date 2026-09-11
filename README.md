@@ -1,109 +1,114 @@
 # Keystone
 
 > **Contract-first, pluggable agent foundation for the enterprise.**
-> 企业通用 Agent 基座平台：FED 主导的可视化管控面（React） + Go Agent Runtime。
-> 业务方零代码配置即可搭建、编排、运维 Agent；工具、模型、RAG 全部插件化。
+> An enterprise-grade Agent platform: visual control plane (React) + Go Agent Runtime.
+> Configure, orchestrate, and operate Agents with zero code — tools, models, and RAG are all pluggable.
 
 [![Contract Lint](https://img.shields.io/badge/contract-openapi%203.0-8BC8EA)](contracts/openapi.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![中文文档](https://img.shields.io/badge/README-中文-555555)](README.zh-CN.md)
 
 ---
 
-## 为什么是 Keystone
+## Why Keystone
 
-市面上多数 Agent 项目是**写死逻辑的单 Agent Demo**：改 Prompt、接新工具都要动代码，企业无法复用、交付成本高。
+Most Agent projects on the market are **single-Agent demos with hardcoded logic**: changing a prompt or adding a tool requires code changes, making them impossible to reuse across the enterprise with high delivery costs.
 
-Keystone 定位不同——**它不做一个 Agent，而是做承载企业所有 Agent 的基座**：
+Keystone takes a different approach — **it doesn't build one Agent, it builds the foundation that hosts all enterprise Agents**:
 
-- **契约驱动**：`contracts/openapi.yaml` 是单一事实源，前端 TS 类型与后端 Go struct 全部由它生成，配置模型与运行时永远一致；
-- **可插拔**：Tool / Model / RAG 统一抽象接口，业务方按协议实现即插即用，内核零改动；
-- **可视化编排**：react-flow 拖拽搭建 Agent 工作流，业务同学无需开发介入；
-- **企业属性**：版本快照、租户隔离、全链路 Trace、可观测面板。
+- **Contract-Driven**: `contracts/openapi.yaml` is the single source of truth. Frontend TS types and backend Go structs are all generated from it, ensuring configuration model and runtime are always in sync;
+- **Pluggable**: Tool / Model / RAG share a unified abstraction interface. Implement the protocol, register, and go — kernel stays untouched;
+- **Visual Orchestration**: Build Agent workflows via react-flow drag-and-drop, no developer intervention needed;
+- **Enterprise-Ready**: Version snapshots, tenant isolation, full-chain trace, observability dashboard.
 
-## 架构总览
+## Architecture Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  管控面 · FED（React + TypeScript）                            │
-│  可视化编排 / Agent 配置台 / 工具注册中心 / 会话调试台 / 监控     │
+│  Control Plane · FED (React + TypeScript)                     │
+│  Visual orchestration / Agent config / Tool registry /       │
+│  Session debugger / Monitoring                                │
 └───────────────────────────┬──────────────────────────────────┘
-                            │ REST（契约生成的 TS 类型）
+                            │ REST (contract-generated TS types)
 ┌───────────────────────────▼──────────────────────────────────┐
-│  API 网关 · Go（鉴权 / 限流 / 模型密钥网关 / 日志埋点）          │
+│  API Gateway · Go (auth / rate-limit / model-key gateway)     │
 └───────────────────────────┬──────────────────────────────────┘
-                            │ 内部调用
+                            │ internal calls
 ┌───────────────────────────▼──────────────────────────────────┐
-│  Agent Runtime · Go（goroutine 并发调度）                      │
-│  执行引擎 / 调度器 / 多 Agent 编排 / 会话状态 / 工作流引擎       │
+│  Agent Runtime · Go (goroutine concurrent scheduling)         │
+│  Execution engine / scheduler / multi-agent orchestration /  │
+│  Session state / workflow engine                              │
 └───────────────────────────┬──────────────────────────────────┘
-                            │ 适配器调用
+                            │ adapter calls
 ┌───────────────────────────▼──────────────────────────────────┐
-│  插件层 · Tool 适配器 / Model 适配器 / RAG 适配器               │
+│  Plugin Layer · Tool adapters / Model adapters / RAG adapters │
 └───────────────────────────┬──────────────────────────────────┘
                             │
 ┌───────────────────────────▼──────────────────────────────────┐
-│  基础设施 · PostgreSQL / Redis / Chroma / Ollama（Docker 一键）│
+│  Infrastructure · PostgreSQL / Redis / Chroma / Ollama        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 1. 安装工具链（Go >=1.22, Node >=20, Docker）
+# 1. Install toolchain (Go >=1.22, Node >=20, Docker)
 make setup
 
-# 2. 从契约生成双端代码（契约先行）
+# 2. Generate dual-end code from contract (contract-first)
 make gen
 
-# 3. 一键拉起基础设施
+# 3. Spin up infrastructure
 make up
 
-# 4. 启动后端与前端
-make dev-back   # 终端 1
-make dev-front  # 终端 2  → http://localhost:5173
+# 4. Start backend and frontend
+make dev-back   # terminal 1
+make dev-front  # terminal 2  → http://localhost:5173
 ```
 
-## 仓库结构
+## Repository Structure
 
 ```text
 keystone/
 ├── contracts/
-│   └── openapi.yaml        # ⭐ 单一事实源：Agent/Tool/Session/Workflow/Run 契约
-├── frontend/               # FED 管控面（React + TS + Vite + react-flow）
-│   └── src/generated/      # openapi-typescript 生成（禁止手改）
+│   └── openapi.yaml        # ⭐ Single source of truth: Agent/Tool/Session/Workflow/Run
+├── frontend/               # FED control plane (React + TS + Vite + react-flow)
+│   └── src/generated/      # openapi-typescript output (DO NOT EDIT)
 ├── backend/                # Go Runtime
-│   ├── cmd/server/         # 入口
+│   ├── cmd/server/         # Entry point
 │   └── internal/
-│       ├── api/            # oapi-codegen 生成 + handler 实现
-│       ├── agent/          # 执行引擎 / 调度器 / 会话
-│       ├── tool/           # 工具注册中心
-│       ├── model/          # 模型适配器
-│       ├── workflow/       # 编排图解析与执行
-│       └── store/          # PostgreSQL / Redis
-├── examples/               # 示例 Agent 与自定义工具
-├── docs/architecture.md    # 架构与设计决策
+│       ├── types/          # Domain types aligned with OpenAPI schemas
+│       ├── api/            # HTTP handlers (OpenAPI contract)
+│       ├── agent/          # Execution engine / scheduler / sessions
+│       ├── tool/           # Tool registration center
+│       ├── model/          # Model adapters (OpenAI / Ollama / Mock)
+│       ├── workflow/       # Orchestration graph parser & executor
+│       └── store/          # In-memory store (M2: PostgreSQL / Redis)
+├── examples/               # Sample agents & custom tools
+├── docs/architecture.md    # Architecture & design decisions
+├── CLAUDE.md               # Project skill & conventions
 ├── Makefile                # gen / up / dev / test / check
-└── docker-compose.yml
+└── docker-compose.yml      # One-command infrastructure
 ```
 
-## 核心标准（一句话版）
+## Core Concepts
 
-| 标准 | 含义 |
+| Concept | Description |
 |---|---|
-| `AgentSpec` | Agent 是配置描述对象，平台读取 Spec 实例化运行，而非硬编码类 |
-| `Tool` 协议 | 所有工具统一 `inputSchema(JSON Schema) + Execute`，注册即插即用 |
-| `ModelAdapter` | 一套 Agent 配置可切换 OpenAI / 通义 / Ollama，密钥不出服务端 |
-| `WorkflowSpec` | 前端编排图（nodes + edges）直接驱动 Runtime 执行引擎 |
-| `TraceEvent` | 每步 LLM/工具调用落痕，会话调试台逐步回放 |
+| `AgentSpec` | Agent is a config object; platform reads Spec to instantiate runtime, not hardcoded classes |
+| `Tool` Protocol | All tools share unified `inputSchema(JSON Schema) + Execute`; register and use |
+| `ModelAdapter` | One Agent config switches between OpenAI / Tongyi / Ollama; keys never leave server |
+| `WorkflowSpec` | Frontend orchestration graph (nodes + edges) directly drives Runtime execution |
+| `TraceEvent` | Every LLM/tool call is recorded for session debugger step-by-step replay |
 
-## 路线图
+## Roadmap
 
-- [x] M0 契约先行：OpenAPI 单一事实源 + 双端代码生成链路
-- [x] M1 Runtime 核心：执行引擎 / 工具注册中心 / 会话（Go）
-- [ ] M2 API 网关 + 持久化（PostgreSQL / Redis）
-- [ ] M3 FED 管控面：Agent CRUD / 会话调试台 / 工具注册 UI
-- [ ] M4 可视化编排：react-flow 拖拽 + 工作流引擎
-- [ ] M5 可观测面板 / Docker 交付 / 演示视频
+- [x] M0 Contract-first: OpenAPI single source of truth + dual-end code generation
+- [x] M1 Runtime core: execution engine / tool registry / sessions (Go)
+- [ ] M2 API gateway + persistence (PostgreSQL / Redis)
+- [ ] M3 FED console: Agent CRUD / session debugger / tool registration UI
+- [ ] M4 Visual orchestration: react-flow drag-and-drop + workflow engine
+- [ ] M5 Observability dashboard / Docker delivery / demo video
 
 ## License
 
