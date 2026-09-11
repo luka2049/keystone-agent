@@ -99,7 +99,7 @@ keystone/
 ## 路线图
 
 - [x] M0 契约先行：OpenAPI 单一事实源 + 双端代码生成链路
-- [ ] M1 Runtime 核心：执行引擎 / 工具注册中心 / 会话（Go）
+- [x] M1 Runtime 核心：执行引擎 / 工具注册中心 / 会话（Go）
 - [ ] M2 API 网关 + 持久化（PostgreSQL / Redis）
 - [ ] M3 FED 管控面：Agent CRUD / 会话调试台 / 工具注册 UI
 - [ ] M4 可视化编排：react-flow 拖拽 + 工作流引擎
