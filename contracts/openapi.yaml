@@ -1,0 +1,1054 @@
+openapi: 3.0.3
+info:
+  title: Keystone Agent Foundation API
+  version: 0.1.0
+  description: |
+    Keystone is a contract-first, pluggable agent foundation platform for the enterprise.
+    This OpenAPI document is the SINGLE SOURCE OF TRUTH:
+    - backend Go structs are generated via oapi-codegen
+    - frontend TS types are generated via openapi-typescript
+    Do NOT hand-edit generated code. Change the contract, then regenerate.
+  license:
+    name: Apache-2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+
+tags:
+  - name: agents
+    description: Agent 实例的增删改查与版本管理
+  - name: tools
+    description: 工具注册中心（插件化 Tool 协议）
+  - name: models
+    description: 模型适配器注册与查询
+  - name: sessions
+    description: 会话管理与消息交互
+  - name: workflows
+    description: 可视化编排图的定义与执行
+  - name: runs
+    description: Agent/工作流运行与全链路观测
+  - name: observability
+    description: 平台可观测统计
+
+paths:
+  # ============ Agents ============
+  /api/v1/agents:
+    get:
+      tags: [agents]
+      summary: 分页查询 Agent 实例列表
+      operationId: listAgents
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AgentStatus'
+      responses:
+        '200':
+          description: Agent 列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [agents]
+      summary: 创建 Agent（Spec 驱动，业务方零代码）
+      operationId: createAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentSpec'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/agents/{agentId}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [agents]
+      summary: 查询单个 Agent
+      operationId: getAgent
+      responses:
+        '200':
+          description: Agent 详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [agents]
+      summary: 更新 Agent（自动生成新版本快照）
+      operationId: updateAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentSpec'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentSpec'
+    delete:
+      tags: [agents]
+      summary: 删除 Agent（软删除）
+      operationId: deleteAgent
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/agents/{agentId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [agents]
+      summary: 查看 Agent 的版本历史（Prompt/配置快照）
+      operationId: listAgentVersions
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentVersion'
+
+  # ============ Tools ============
+  /api/v1/tools:
+    get:
+      tags: [tools]
+      summary: 查询工具注册表
+      operationId: listTools
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 工具列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolList'
+    post:
+      tags: [tools]
+      summary: 注册自定义工具（业务方通过 Schema 声明即插即用）
+      operationId: registerTool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolSpec'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolSpec'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/tools/{toolId}:
+    parameters:
+      - $ref: '#/components/parameters/ToolId'
+    get:
+      tags: [tools]
+      summary: 查询单个工具
+      operationId: getTool
+      responses:
+        '200':
+          description: 工具详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolSpec'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [tools]
+      summary: 注销工具（软删除）
+      operationId: deleteTool
+      responses:
+        '204':
+          description: 注销成功
+
+  /api/v1/tools/{toolId}/test:
+    parameters:
+      - $ref: '#/components/parameters/ToolId'
+    post:
+      tags: [tools]
+      summary: 工具联调测试（不进入 Agent 循环，直接执行）
+      operationId: testTool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolTestRequest'
+      responses:
+        '200':
+          description: 执行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolResult'
+
+  # ============ Models ============
+  /api/v1/models:
+    get:
+      tags: [models]
+      summary: 查询已注册的模型适配器（OpenAI/通义/Ollama…）
+      operationId: listModels
+      responses:
+        '200':
+          description: 模型适配器列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelProvider'
+
+  # ============ Sessions ============
+  /api/v1/sessions:
+    post:
+      tags: [sessions]
+      summary: 创建会话
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: 会话创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+
+  /api/v1/sessions/{sessionId}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [sessions]
+      summary: 查询会话详情（含消息历史）
+      operationId: getSession
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [sessions]
+      summary: 删除会话
+      operationId: deleteSession
+      responses:
+        '204':
+          description: 删除成功
+
+  /api/v1/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags: [sessions]
+      summary: 发送消息并触发 Agent 执行（同步返回完整结果）
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Agent 执行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ============ Workflows ============
+  /api/v1/workflows:
+    get:
+      tags: [workflows]
+      summary: 查询编排工作流列表
+      operationId: listWorkflows
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 工作流列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowList'
+    post:
+      tags: [workflows]
+      summary: 保存编排图（react-flow 导出的节点/边）
+      operationId: createWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowSpec'
+      responses:
+        '201':
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSpec'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/workflows/{workflowId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [workflows]
+      summary: 查询编排图详情
+      operationId: getWorkflow
+      responses:
+        '200':
+          description: 编排图详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSpec'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [workflows]
+      summary: 更新编排图
+      operationId: updateWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowSpec'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSpec'
+    delete:
+      tags: [workflows]
+      summary: 删除编排图
+      operationId: deleteWorkflow
+      responses:
+        '204':
+          description: 删除成功
+
+  /api/v1/workflows/{workflowId}/runs:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [workflows, runs]
+      summary: 执行编排图（异步任务，返回 runId）
+      operationId: runWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+      responses:
+        '202':
+          description: 已接受执行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunReference'
+
+  # ============ Runs / Trace ============
+  /api/v1/runs/{runId}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [runs]
+      summary: 查询运行结果（Agent 或工作流）
+      operationId: getRun
+      responses:
+        '200':
+          description: 运行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/runs/{runId}/trace:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [runs]
+      summary: 查询全链路调用轨迹（每步 LLM/工具调用、耗时、token）
+      operationId: getRunTrace
+      responses:
+        '200':
+          description: 调用轨迹
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TraceEvent'
+
+  # ============ Observability ============
+  /api/v1/observability/summary:
+    get:
+      tags: [observability]
+      summary: 平台级统计（调用量、token、工具成功率、错误分布）
+      operationId: getObservabilitySummary
+      responses:
+        '200':
+          description: 统计摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservabilitySummary'
+
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ToolId:
+      name: toolId
+      in: path
+      required: true
+      schema:
+        type: string
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowId:
+      name: workflowId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: 请求参数不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: 未认证或无权访问
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # ========== Agent ==========
+    AgentStatus:
+      type: string
+      enum: [draft, active, disabled]
+      description: draft=草稿可编辑, active=已启用可被会话调用, disabled=停用
+    AgentStrategy:
+      type: object
+      description: 运行时策略（防失控的核心约束）
+      required: [maxIterations, maxConcurrency, contextWindow, timeoutMs]
+      properties:
+        maxIterations:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+          description: LLM↔工具最大循环轮次，防止死循环
+        maxConcurrency:
+          type: integer
+          minimum: 1
+          maximum: 16
+          default: 4
+          description: 并行工具调用上限（对应 Go goroutine + semaphore）
+        contextWindow:
+          type: integer
+          minimum: 1024
+          default: 8192
+          description: 上下文窗口上限，超出按策略截断
+        enableTool:
+          type: boolean
+          default: true
+        timeoutMs:
+          type: integer
+          default: 60000
+          description: 单次运行整体超时
+    AgentSpec:
+      type: object
+      description: Agent 是"配置描述对象"，平台读取 Spec 实例化运行，而非硬编码类
+      required: [name, systemPrompt, modelRef]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 512
+        systemPrompt:
+          type: string
+          description: 系统提示词，支持 ${biz_context} 变量插值
+        modelRef:
+          type: string
+          description: 引用已注册模型适配器的 ID
+        toolRefs:
+          type: array
+          items:
+            type: string
+          description: 绑定工具 ID 列表（来自工具注册中心）
+        strategy:
+          $ref: '#/components/schemas/AgentStrategy'
+        version:
+          type: string
+          readOnly: true
+          description: 语义化版本号，每次更新自动递增
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    AgentVersion:
+      type: object
+      description: Prompt/配置快照，支持回滚
+      properties:
+        version:
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/AgentSpec'
+        changedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AgentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSpec'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    # ========== Tool ==========
+    ToolSpec:
+      type: object
+      description: |
+        工具注册标准。业务方实现 Tool 协议（Schema 声明 + Execute 实现），
+        注册到工具中心即插即用，平台内核零改动。
+      required: [name, description, inputSchema, execution]
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: 形如 tool.http.weather 的命名空间 ID
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          description: 给 LLM 理解该工具何时使用的说明（决定工具被选中的概率）
+        inputSchema:
+          type: object
+          additionalProperties: true
+          description: JSON Schema，LLM 据此生成入参；前端据此渲染表单
+        outputSchema:
+          type: object
+          additionalProperties: true
+          description: JSON Schema，可空
+        execution:
+          $ref: '#/components/schemas/ToolExecution'
+        enabled:
+          type: boolean
+          default: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+    ToolExecution:
+      type: object
+      description: 工具执行方式，三种后端内置策略，插件化扩展
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [http, code, plugin]
+        http:
+          type: object
+          description: type=http 时使用
+          properties:
+            url:
+              type: string
+              format: uri
+            method:
+              type: string
+              enum: [GET, POST, PUT, DELETE]
+            headers:
+              type: object
+              additionalProperties:
+                type: string
+              description: 敏感 header 走密钥引用（如 ${secret.API_KEY}），不落明文
+            timeoutMs:
+              type: integer
+              default: 10000
+        code:
+          type: object
+          description: type=code 时使用（沙箱内执行 JS/TS 表达式）
+          properties:
+            language:
+              type: string
+              enum: [javascript]
+            script:
+              type: string
+        plugin:
+          type: object
+          description: type=plugin 时使用（Go 插件二进制 / 远程 MCP 服务）
+          properties:
+            ref:
+              type: string
+    ToolTestRequest:
+      type: object
+      required: [params]
+      properties:
+        params:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+          description: 联调链路 ID，可空
+    ToolResult:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        latencyMs:
+          type: integer
+          readOnly: true
+    ToolList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSpec'
+        total:
+          type: integer
+
+    # ========== Model ==========
+    ModelProvider:
+      type: object
+      description: 模型适配器统一协议，切换模型对 Agent 无感知
+      properties:
+        id:
+          type: string
+          description: 如 openai.gpt-4o / ollama.qwen2.5 / tongyi.qwen-max
+        name:
+          type: string
+        providerType:
+          type: string
+          enum: [openai, ollama, tongyi, custom]
+        supportsTools:
+          type: boolean
+          default: true
+        contextWindow:
+          type: integer
+        enabled:
+          type: boolean
+          default: true
+
+    # ========== Session ==========
+    MessageRole:
+      type: string
+      enum: [system, user, assistant, tool]
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/MessageRole'
+        content:
+          type: string
+        toolCalls:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: assistant 消息携带的工具调用意图
+        toolResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolResult'
+        timestamp:
+          type: string
+          format: date-time
+    CreateSessionRequest:
+      type: object
+      required: [agentId]
+      properties:
+        agentId:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: 业务侧自定义维度（租户/部门/来源）
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agentId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, closed, expired]
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SendMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          maxLength: 8192
+
+    # ========== Workflow ==========
+    WorkflowNodeType:
+      type: string
+      enum: [llm, tool, condition, subagent, output]
+      description: 编排图节点类型：LLM 节点/工具节点/条件分支/子 Agent/输出
+    WorkflowNode:
+      type: object
+      required: [id, type]
+      properties:
+        id:
+          type: string
+          description: 与前端 react-flow 节点 id 一致
+        type:
+          $ref: '#/components/schemas/WorkflowNodeType'
+        label:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+          description: |
+            按类型承载配置：
+            - llm: {modelRef, systemPrompt, temperature}
+            - tool: {toolId, params}
+            - condition: {expression}  （表达式在 Runtime 沙箱求值）
+            - subagent: {agentId, taskPrompt}
+        position:
+          type: object
+          description: 前端画布坐标（仅展示用，运行时忽略）
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+    WorkflowEdge:
+      type: object
+      required: [id, source, target]
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+          description: 源节点 id
+        target:
+          type: string
+          description: 目标节点 id
+        condition:
+          type: string
+          nullable: true
+          description: 条件分支表达式；为空表示无条件直连
+        label:
+          type: string
+    WorkflowSpec:
+      type: object
+      required: [name, nodes, edges]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEdge'
+        version:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    WorkflowList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSpec'
+        total:
+          type: integer
+
+    # ========== Run ==========
+    RunStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, timeout, cancelled]
+    RunRequest:
+      type: object
+      description: 工作流执行入参；Agent 直跑请走 sessions/{id}/messages
+      properties:
+        input:
+          type: string
+        variables:
+          type: object
+          additionalProperties: true
+          description: 编排图变量（如 ${biz_context}）
+        traceId:
+          type: string
+          nullable: true
+    RunReference:
+      type: object
+      required: [runId]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RunStatus'
+    RunResult:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        answer:
+          type: string
+          nullable: true
+        iterations:
+          type: integer
+          description: 实际执行的 LLM↔工具循环轮数
+        usage:
+          type: object
+          properties:
+            inputTokens:
+              type: integer
+            outputTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            latencyMs:
+              type: integer
+        error:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # ========== Trace / Observability ==========
+    TraceEvent:
+      type: object
+      description: 一次 LLM 调用或工具调用的可观测事件
+      properties:
+        traceId:
+          type: string
+        seq:
+          type: integer
+        type:
+          type: string
+          enum: [model_call, tool_call, branch, subagent]
+        nodeId:
+          type: string
+          nullable: true
+          description: 编排图节点 id（工作流场景）
+        payload:
+          type: object
+          additionalProperties: true
+          description: 'model_call: {model, promptTokens}; tool_call: {toolId, params, result}'
+        status:
+          type: string
+          enum: [ok, error]
+        latencyMs:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+    ObservabilitySummary:
+      type: object
+      description: 平台级统计（时间窗口由服务端配置）
+      properties:
+        totalRuns:
+          type: integer
+        totalMessages:
+          type: integer
+        totalTokens:
+          type: integer
+        toolSuccessRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        avgLatencyMs:
+          type: number
+          format: float
+        errorByType:
+          type: object
+          additionalProperties:
+            type: integer
+          description: 错误分类计数（如 timeout/model_error/tool_error）
+
+    # ========== Common ==========
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 机器可读错误码，如 AGENT_NOT_FOUND / TOOL_EXEC_TIMEOUT
+        message:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+          nullable: true

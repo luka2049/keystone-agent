@@ -1,0 +1,60 @@
+# Keystone 本地开发基础设施
+# 用途：一键拉起 Agent Runtime 依赖（Postgres / Redis / Chroma / Ollama）
+# 用法：make up / make down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: keystone-postgres
+    environment:
+      POSTGRES_USER: keystone
+      POSTGRES_PASSWORD: keystone
+      POSTGRES_DB: keystone
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keystone"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: keystone-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: keystone-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 本地模型（可选）：启用后 Model 适配器可配置 ollama.xxx
+  ollama:
+    image: ollama/ollama:latest
+    container_name: keystone-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    profiles: ["local-model"]
+
+volumes:
+  pgdata:
+  chroma-data:
+  ollama-data:

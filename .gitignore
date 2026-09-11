@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env
+.env
+.env.local
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/src/generated/api.ts
+
+# Backend
+backend/internal/api/gen/
+
+# Docker volumes
+pgdata/
+chroma-data/
+ollama-data/
